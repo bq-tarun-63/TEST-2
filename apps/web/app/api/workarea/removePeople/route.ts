@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+import { WorkAreaService } from "@/services/workAreaService";
+import { getAuthenticatedUser, isAuthError } from "@/lib/utils/auth";
+import { PermissionService } from "@/services/PermissionService";
+
+export async function POST(req: Request) {
+  try {
+    const auth = await getAuthenticatedUser(undefined, { createUserIfNotFound: true });
+    if (isAuthError(auth)) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+    const { user } = auth;
+
+    const body = await req.json();
+    const { workAreaId, memberEmails } = body;
+
+    // Validate required fields
+    if (!workAreaId || !memberEmails) {
+      return NextResponse.json({
+        error: "workAreaId and memberEmails are required"
+      }, { status: 400 });
+    }
+
+    // Validate memberEmails is an array
+    if (!Array.isArray(memberEmails) || memberEmails.length === 0) {
+      return NextResponse.json({
+        error: "memberEmails must be a non-empty array"
+      }, { status: 400 });
+    }
+
+    // Check if user has permission to remove people from workarea
+    const canManage = await PermissionService.checkWorkAreaAccess({
+      userId: String(user._id),
+      workAreaId: String(workAreaId),
+      requiredRole: 'admin'
+    });
+
+    if (!canManage) {
+      return NextResponse.json({
+        error: "Only workarea admins can remove people"
+      }, { status: 403 });
+    }
+
+    const workArea = await WorkAreaService.removePeopleFromWorkArea({
+      workAreaId,
+      memberEmails,
+      currentUserId: String(user._id),
+    });
+
+    // Format work area to include id field
+    const formattedWorkArea = {
+      ...workArea,
+      id: String(workArea._id),
+      _id: String(workArea._id),
+    };
+
+    return NextResponse.json({
+      message: "People removed from workarea successfully",
+      workArea: formattedWorkArea,
+    }, { status: 200 });
+  } catch (error) {
+    console.error("Error removing people from workarea:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({
+      message: errorMessage,
+      error: errorMessage
+    }, { status: 500 });
+  }
+}
+
+

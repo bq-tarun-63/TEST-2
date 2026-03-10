@@ -1,0 +1,12 @@
+
+export const defaultEditorContent = {
+  type: "doc",
+  content: [
+    {
+      type: "text",
+      attrs: { level: 2 },
+      content: [],
+    },
+  ],
+};
+
